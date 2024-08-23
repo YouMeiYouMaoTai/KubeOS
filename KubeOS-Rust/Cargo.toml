@@ -1,5 +1,5 @@
 [workspace]
-members = ["agent", "cli", "manager", "proxy"]
+members = ["agent", "cli", "manager", "operator", "proxy"]
 resolver = "2"
 
 [profile.release]
