@@ -9,72 +9,77 @@
 ## See the Mulan PSL v2 for more details.
 
 # Image URL to use all building/pushing image targets
-IMG_PROXY ?= proxy:latest
+# IMG_PROXY ?= proxy:latest
 IMG_OPERATOR ?= operator:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
+# # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+# ifeq (,$(shell go env GOBIN))
+# GOBIN=$(shell go env GOPATH)/bin
+# else
+# GOBIN=$(shell go env GOBIN)
+# endif
 
-GO := go
-ifeq ($(shell go help mod >/dev/null 2>&1 && echo true), true)
-export GO111MODULE=on
-export GO_BUILD = $(GO) build -mod=vendor
-else
-export GO_BUILD=$(GO) build
-endif
+# GO := go
+# ifeq ($(shell go help mod >/dev/null 2>&1 && echo true), true)
+# export GO111MODULE=on
+# export GO_BUILD = $(GO) build -mod=vendor
+# else
+# export GO_BUILD=$(GO) build
+# endif
 
-VERSION_FILE := ./VERSION
-VERSION := $(shell cat $(VERSION_FILE))
-PACKAGE:=openeuler.org/KubeOS/pkg/version
+# VERSION_FILE := ./VERSION
+# VERSION := $(shell cat $(VERSION_FILE))
+# PACKAGE:=openeuler.org/KubeOS/pkg/version
 
-EXTRALDFLAGS := -linkmode=external -extldflags=-ftrapv \
-	-extldflags=-Wl,-z,relro,-z,now
+# EXTRALDFLAGS := -linkmode=external -extldflags=-ftrapv \
+# 	-extldflags=-Wl,-z,relro,-z,now
 
-LD_FLAGS := -ldflags '-buildid=IdByKubeOS \
-	-X ${PACKAGE}.Version=${VERSION} \
-	$(EXTRALDFLAGS)   '
+# LD_FLAGS := -ldflags '-buildid=IdByKubeOS \
+# 	-X ${PACKAGE}.Version=${VERSION} \
+# 	$(EXTRALDFLAGS)   '
 
-GO_BUILD_CGO = CGO_ENABLED=1 \
-	CGO_CFLAGS="-fstack-protector-strong -fPIE -fPIC -D_FORTIFY_SOURCE=2 -O2" \
-	CGO_LDFLAGS_ALLOW='-Wl,-z,relro,-z,now' \
-	CGO_LDFLAGS="-Wl,-z,relro,-z,now -Wl,-z,noexecstack" \
-	${GO_BUILD} -buildmode=pie -trimpath -tags "seccomp selinux static_build cgo netgo osusergo"
+# GO_BUILD_CGO = CGO_ENABLED=1 \
+# 	CGO_CFLAGS="-fstack-protector-strong -fPIE -fPIC -D_FORTIFY_SOURCE=2 -O2" \
+# 	CGO_LDFLAGS_ALLOW='-Wl,-z,relro,-z,now' \
+# 	CGO_LDFLAGS="-Wl,-z,relro,-z,now -Wl,-z,noexecstack" \
+# 	${GO_BUILD} -buildmode=pie -trimpath -tags "seccomp selinux static_build cgo netgo osusergo"
 
 RUSTFLAGS := RUSTFLAGS="-C relocation_model=pic -D warnings -W unsafe_code -W rust_2021_incompatible_closure_captures -C link-arg=-s"
 
-all: proxy operator agent hostshell rust-kubeos
+# all: proxy operator agent hostshell rust-kubeos
+all: rust-operator
+# all: rust-proxy
 
 # Build binary
-proxy:
-	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/proxy  cmd/proxy/main.go
-	strip bin/proxy
+# proxy:
+# 	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/proxy  cmd/proxy/main.go
+# 	strip bin/proxy
 
-operator:
-	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/operator cmd/operator/main.go
-	strip bin/operator
+# operator:
+# 	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/operator cmd/operator/main.go
+# 	strip bin/operator
 
-agent:
-	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/os-agent cmd/agent/main.go
-	strip bin/os-agent
+# agent:
+# 	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/os-agent cmd/agent/main.go
+# 	strip bin/os-agent
 
-hostshell:
-	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/hostshell cmd/admin-container/main.go
-	strip bin/hostshell
+# hostshell:
+# 	${GO_BUILD_CGO} ${LD_FLAGS} -o bin/hostshell cmd/admin-container/main.go
+# 	strip bin/hostshell
 
-rust-kubeos:
-	cd KubeOS-Rust && ${RUSTFLAGS} cargo build --profile release --target-dir ../bin/rust
+# rust-kubeos:
+# 	cd KubeOS-Rust && ${RUSTFLAGS} cargo build --profile release --target-dir ../bin/rust
 
-rust-proxy:
-	cd KubeOS-Rust && ${RUSTFLAGS} cargo build --profile release --target-dir ../bin/rust --package proxy
+# rust-proxy:
+# 	cd KubeOS-Rust && ${RUSTFLAGS} cargo build --profile release --target-dir ../bin/rust --package proxy
 
-rust-agent:
-	cd KubeOS-Rust && ${RUSTFLAGS} cargo build --profile release --target-dir ../bin/rust --package os-agent
+# rust-agent:
+# 	cd KubeOS-Rust && ${RUSTFLAGS} cargo build --profile release --target-dir ../bin/rust --package os-agent
+
+rust-operator:
+	cd KubeOS-Rust && ${RUSTFLAGS} cargo build --profile release --target-dir ../bin/rust --package operator
 
 # Install CRDs into a cluster
 install: manifests
@@ -110,15 +115,15 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
-# Build the docker image
-docker-build: operator proxy
-	docker build --target operator -t ${IMG_OPERATOR} .
-	docker build --target proxy -t ${IMG_PROXY} .
+# # Build the docker image
+# docker-build: operator proxy
+# 	docker build --target operator -t ${IMG_OPERATOR} .
+# 	docker build --target proxy -t ${IMG_PROXY} .
 
-# Push the docker image
-docker-push:
-	docker push ${IMG_OPERATOR}
-	docker push ${IMG_PROXY}
+# # Push the docker image
+# docker-push:
+# 	docker push ${IMG_OPERATOR}
+# 	docker push ${IMG_PROXY}
 
 ## Location to install dependencies to
 LOCALBIN = $(shell pwd)/bin

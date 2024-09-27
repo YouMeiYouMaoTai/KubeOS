@@ -13,14 +13,16 @@
 use kube::runtime::controller::ReconcilerAction;
 use tokio::time::Duration;
 
+#[cfg(test)]
 pub const LABEL_OSINSTANCE: &str = "upgrade.openeuler.org/osinstance-node";
+
 pub const LABEL_UPGRADING: &str = "upgrade.openeuler.org/upgrading";
 
 pub const LABEL_MASTER: &str = "node-role.kubernetes.io/control-plane";
 
 pub const OSINSTANCE_API_VERSION: &str = "upgrade.openeuler.org/v1alpha1";
 pub const OSINSTANCE_KIND: &str = "OSInstance";
-pub const OSI_STATUS_NAME: &str = "nodestatus";
+// pub const OSI_STATUS_NAME: &str = "nodestatus";
 
 pub const UPGRADE_CONFIG_NAME: &str = "UpgradeConfig";
 pub const SYS_CONFIG_NAME: &str = "SysConfig";
@@ -33,7 +35,6 @@ pub const OPERATION_TYPE_UPGRADE: &str = "upgrade";
 pub const OPERATION_TYPE_ROLLBACK: &str = "rollback";
 pub const OPERATION_TYPE_CONFIG: &str = "config";
 
-pub const SOCK_PATH: &str = "/run/os-agent/os-agent.sock";
 
 pub const NO_REQUEUE: ReconcilerAction = ReconcilerAction { requeue_after: None };
 

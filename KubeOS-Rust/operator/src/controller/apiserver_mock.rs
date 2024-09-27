@@ -489,7 +489,7 @@ impl ApiServerVerifier {
         assert_eq!(request.method(), http::Method::GET);
         assert_eq!(
             request.uri().to_string(),
-            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?&fieldSelector=nodestatus%3Dconfig");
+            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?");
         assert_eq!(request.extensions().get(), Some(&"list"));
 
         // 将 k8s_resc 中 nodestatus 为 config 的 osi 传出
@@ -521,7 +521,7 @@ impl ApiServerVerifier {
         assert_eq!(request.method(), http::Method::GET);
         assert_eq!(
             request.uri().to_string(),
-            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?&fieldSelector=nodestatus%3Didle&limit=3");
+            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?&limit=3");
         assert_eq!(request.extensions().get(), Some(&"list"));
 
         // 将 k8s_resc 中 nodestatus 为 config 的 osi 传出
@@ -612,7 +612,7 @@ impl ApiServerVerifier {
         assert_eq!(request.method(), http::Method::GET);
         assert_eq!(
             request.uri().to_string(),
-            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?&fieldSelector=nodestatus%3Dconfig");
+            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?");
         assert_eq!(request.extensions().get(), Some(&"list"));
 
         dbg!("handler_config_osi_list_get_error");
@@ -668,7 +668,7 @@ impl ApiServerVerifier {
 
         // 构建 HTTP 响应
         let response = serde_json::to_vec(&response_body).unwrap();
-        send.send_response(Response::builder().status(404).body(Body::from(response)).unwrap());
+        send.send_response(Response::builder().status(400).body(Body::from(response)).unwrap());
 
         Ok(self)
     }
@@ -678,7 +678,7 @@ impl ApiServerVerifier {
         assert_eq!(request.method(), http::Method::GET);
         assert_eq!(
             request.uri().to_string(),
-            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?&fieldSelector=nodestatus%3Didle&limit=3");
+            "/apis/upgrade.openeuler.org/v1alpha1/namespaces/default/osinstances?&limit=3");
         assert_eq!(request.extensions().get(), Some(&"list"));
 
         dbg!("handler_idle_osi_list_get_error");

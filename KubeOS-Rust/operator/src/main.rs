@@ -24,7 +24,7 @@ use tokio::signal;
 
 mod controller;
 use controller::{
-    error_policy, reconcile, ControllerClient, OperatorController, OS, SOCK_PATH,
+    error_policy, reconcile, ControllerClient, OperatorController, OS,
 };
 
 const OPERATOR_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
@@ -33,7 +33,7 @@ const OPERATOR_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 #[tokio::main]
 async fn main() -> Result<()> {
     // 初始化日志记录器，默认日志级别为info，输出到标准输出
-    Builder::from_env(Env::default().default_filter_or("info")).target(Target::Stdout).init();
+    Builder::from_env(Env::default().default_filter_or("debug")).target(Target::Stdout).init();
     
     // 创建一个默认的Kubernetes客户端
     let client = Client::try_default().await?;

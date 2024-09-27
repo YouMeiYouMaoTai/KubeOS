@@ -1,0 +1,90 @@
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: upgrade-system
+# ---
+# apiVersion: apps/v1
+# kind: DaemonSet
+# metadata:
+#   name: upgrade-proxy
+#   namespace: upgrade-system
+#   labels:
+#     control-plane: upgrade-proxy
+# spec:
+#   selector:
+#     matchLabels:
+#       control-plane: upgrade-proxy
+#   template:
+#     metadata:
+#       labels:
+#         control-plane: upgrade-proxy
+#       annotations:
+#         container.apparmor.security.beta.kubernetes.io/proxy: "unconfined"
+#     spec:
+#       containers:
+#        - name: proxy
+#          command:
+#           - /proxy
+#          image: youmeiyoumaotai/proxy-rust:v1.0.1
+#          imagePullPolicy: IfNotPresent
+#          securityContext:
+#             capabilities:
+#               drop:
+#               - all
+#          volumeMounts:
+#           - name: upgrade-agent
+#             mountPath: /var/run/os-agent
+#          env:
+#           - name: NODE_NAME
+#             valueFrom:
+#              fieldRef:
+#               apiVersion: v1
+#               fieldPath: spec.nodeName
+          
+#       volumes:
+#         - name: upgrade-agent
+#           hostPath:
+#             path: /var/run/os-agent
+# ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upgrade-operator
+  namespace: upgrade-system
+  labels:
+    control-plane: upgrade-operator
+spec:
+  selector:
+    matchLabels:
+      control-plane: upgrade-operator
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        control-plane: upgrade-operator
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/operator: "unconfined"
+    spec:
+      containers:
+      - command:
+        - /operator
+        image: youmeiyoumaotai/operator-rust:v1.3.2
+        imagePullPolicy: IfNotPresent
+        name: operator
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsUser: 6552
+          runAsGroup: 6552
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+      terminationGracePeriodSeconds: 10
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+      tolerations:
+        - key: "node-role.kubernetes.io/master"
+          # operator: "Exists"

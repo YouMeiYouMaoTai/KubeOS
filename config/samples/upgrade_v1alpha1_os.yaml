@@ -1,0 +1,33 @@
+apiVersion: upgrade.openeuler.org/v1alpha1
+kind: OS
+metadata:
+    name: os-upgrade-sample
+spec:
+    imagetype: docker
+    opstype: config
+    osversion: KubeOS v1
+    maxunavailable: 3
+    containerimage: youmeiyoumaotai/upgrade-img-rust:v1
+    evictpodforce: true
+    imageurl: ""
+    # checksum: errorchecksum
+    checksum: 74bcf0ca7895c0086812018abfbd37d02e0ede8b70c275d2873033720cf82f18
+    # checksum: 508f62ec507c4c0b5be7905b10cf6e456d60c22c49b613272155b56f2d6a373f
+    flagSafe: false
+    mtls: false
+    sysconfigs:
+        version: v2.0.0
+        configs:
+            - model: grub.cmdline.current
+              contents:
+                - key: b
+                  value: "1"
+                - key: a
+                  value: "2"
+    upgradeconfigs:
+        version: v2.0.0
+        configs:
+            - model: grub.cmdline.current
+              contents:
+                - key: C
+                  value: "3"

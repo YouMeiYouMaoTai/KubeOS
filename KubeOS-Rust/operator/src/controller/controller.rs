@@ -10,29 +10,27 @@
 * See the Mulan PSL v2 for more details.
 */
 
-use std::{collections::HashMap, env};
 
 use anyhow::Result;
-use futures::future::{ok, OrElse};
-use k8s_openapi::{api::{core::v1::{DaemonEndpoint, Node}, node}, chrono::Datelike};
+use k8s_openapi::api::core::v1::Node;
 use kube::{
     api::{Api, ListParams, ObjectList, PostParams},
-    core::{object::HasSpec, ErrorResponse},
+    core::ErrorResponse,
     runtime::controller::{Context, ReconcilerAction},
     Client, ResourceExt,
 };
-use log::{debug, error, info};
+use log::{debug, error};
 use reconciler_error::Error;
 
 use crate::controller::values::NODE_STATUS_UPGRADE;
 
 use super::{
     apiclient::ApplyApi,
-    crd::{Configs, Content, OSInstance, OS},
+    crd::{Configs, OSInstance, OS},
     values::{
         LABEL_MASTER, LABEL_UPGRADING, NODE_STATUS_CONFIG, NODE_STATUS_IDLE, 
         NO_REQUEUE, OPERATION_TYPE_CONFIG, OPERATION_TYPE_ROLLBACK, OPERATION_TYPE_UPGRADE, 
-        REQUEUE_ERROR, REQUEUE_NORMAL, SYS_CONFIG_NAME, UPGRADE_CONFIG_NAME, OSI_STATUS_NAME
+        REQUEUE_ERROR, REQUEUE_NORMAL, SYS_CONFIG_NAME, UPGRADE_CONFIG_NAME
     },
 };
 
@@ -50,21 +48,21 @@ impl<T: ApplyApi> OperatorController<T> {
         }
     }
 
-    async fn reconcile(
-        &self,
-        os: OS,
-        ctx: Context<OperatorController<T>>,
-    ) -> Result<ReconcilerAction, Error> {
-        // k8s_client 变量不是 Option 类型，而是直接的 Client 类型，Rust 会确保不为空，不用检查
+    // async fn reconcile(
+    //     &self,
+    //     os: OS,
+    //     ctx: Context<OperatorController<T>>,
+    // ) -> Result<ReconcilerAction, Error> {
+    //     // k8s_client 变量不是 Option 类型，而是直接的 Client 类型，Rust 会确保不为空，不用检查
         
-        // Kube-rs库中的Context类型已经处理了上下文的管理，也不需要初始化空的上下文，proxy组件的rust版本也没初始化
+    //     // Kube-rs库中的Context类型已经处理了上下文的管理，也不需要初始化空的上下文，proxy组件的rust版本也没初始化
 
-        // 调用外部的Reconcile函数
-        reconcile(os, ctx).await
-    }
+    //     // 调用外部的Reconcile函数
+    //     reconcile(os, ctx).await
+    // }
 
     // 获取 worker 节点数
-    async fn get_and_update_os(&self, namespace: &str) -> Result<i64, Error> {
+    async fn get_and_update_os(&self, _namespace: &str) -> Result<i64, Error> {
 
         // 创建一个筛选标签的 String 数组，只找 worker 节点
         let reqs = vec![
@@ -102,7 +100,7 @@ impl<T: ApplyApi> OperatorController<T> {
     }
 
     // 获取可以进行升级操作的最大节点数量
-    async fn check_upgrading(&self, namespace: &str, max_unavailable: i64) -> Result<i64, Error> {
+    async fn check_upgrading(&self, _namespace: &str, max_unavailable: i64) -> Result<i64, Error> {
 
         // 设置筛选标签，选择标签为正在升级的节点
         let reqs = vec![
@@ -145,14 +143,19 @@ impl<T: ApplyApi> OperatorController<T> {
 
             let os_version_node = node.status.clone().unwrap().node_info.unwrap().os_image;
 
+            debug!("node name: {}, os_version_node: {}, os_version: {}", node.name(), os_version_node, os.spec.osversion);
+
             // 检查 os 对象中的操作系统版本是否与节点的操作系统版本不同
             if os_version_node != os.spec.osversion {
                 
                 // 尝试获取该节点上的 os 实例
                 let osi_api: Api<OSInstance> = Api::namespaced(self.k8s_client.clone(), namespace);
+
                 match osi_api.get(&node.name().clone()).await {
                     Ok(mut osi) => {
-                        debug!("osinstance is exist {:?}", osi.name());
+                        // info!("osinstance is exist {:?}", osi.name());
+
+                        debug!("osinstance is exist: \n {:?} \n", osi);
 
                         match self.update_node_and_osins(os, node, &mut osi).await {
                             Ok(_) => {
@@ -187,14 +190,32 @@ impl<T: ApplyApi> OperatorController<T> {
     async fn update_node_and_osins(&self, os: &OS, node: &mut Node, osinstance: &mut OSInstance, ) -> Result<(), Error> {
         debug!("start update_node_and_OSins");
 
-        // 检查os实例中的升级配置版本与os对象中的升级配置版本是否匹配
-        if osinstance.spec.upgradeconfigs.clone().unwrap().version.unwrap() != os.spec.upgradeconfigs.clone().unwrap().version.unwrap() {
+        // 检查os实例中的升级配置版本与os对象中的升级配置版本是否匹配。osi 字段未初始化时直接进行拷贝
+        let mut copy_sign = true;
+        if let Some(upgradeconfigs) = osinstance.spec.upgradeconfigs.clone() {
+            if let Some(version) = upgradeconfigs.version {
+                if version == os.spec.upgradeconfigs.clone().unwrap().version.unwrap() {
+                    copy_sign = false;
+                }
+            }
+        }
+        if copy_sign {
             self.deep_copy_spec_configs(os, osinstance, UPGRADE_CONFIG_NAME.to_string()).await?;
+            assert!(osinstance.spec.upgradeconfigs.is_some());
         }
 
-        if osinstance.spec.sysconfigs.clone().unwrap().version.unwrap() != os.spec.sysconfigs.clone().unwrap().version.unwrap() {
+        copy_sign = true;
+        // 检查os实例中的系统配置版本与os对象中的系统配置版本是否匹配。osi 字段未初始化时直接进行拷贝
+        if let Some(sysconfigs) = osinstance.spec.sysconfigs.clone() {
+            if let Some(version) = sysconfigs.version {
+                if version == os.spec.sysconfigs.clone().unwrap().version.unwrap() {
+                    copy_sign = false;
+                }
+            }
+        }
+        if copy_sign {
             self.deep_copy_spec_configs(os, osinstance, SYS_CONFIG_NAME.to_string()).await?;
-
+            assert!(osinstance.spec.sysconfigs.is_some());
             if let Some(sysconfigs) = osinstance.spec.sysconfigs.as_mut() {
                 if let Some(configs) = &mut sysconfigs.configs {
                     for config in configs {
@@ -207,7 +228,6 @@ impl<T: ApplyApi> OperatorController<T> {
                     }
                 }
             }
-            
         }
 
         // 更新os实例中的状态为升级完成状态
@@ -280,46 +300,54 @@ impl<T: ApplyApi> OperatorController<T> {
     async fn check_config(&self, namespace: &str, max_unavailable: i64) -> Result<i64, Error> {
         let osinstances = self.get_config_osinstances(namespace).await?;
 
-        Ok(max_unavailable - osinstances.items.len() as i64)
+        Ok(max_unavailable - osinstances.len() as i64)
     }
 
     // 获取所在节点状态为配置的 osinstance列表
-    async fn get_config_osinstances(&self, namespace: &str) -> Result<ObjectList<OSInstance>, Error> {
-        
+    async fn get_config_osinstances(&self, namespace: &str) -> Result<Vec<OSInstance>, Error> {
         let osi_api: Api<OSInstance> = Api::namespaced(self.k8s_client.clone(), namespace);
 
-        let lp = ListParams::default()
-            .fields(&format!("{}={}", OSI_STATUS_NAME, NODE_STATUS_CONFIG));
-
-        let osinstances =  match osi_api.list(&lp).await {
-            Ok(os_instance_list) => os_instance_list,
-            Err(err) => {
-                debug!("err: {:?}", err.to_string());
-                log::error!("unable to list nodes with requirements: {}", err);
-                return Err(Error::KubeClient { source: err });
-            }
-        };
-
+        // 获取所有 OSInstance 资源
+        let all_osinstances = osi_api.list(&ListParams::default()).await?;
+    
+        // 在客户端进行过滤，节点状态为 NODE_STATUS_CONFIG
+        let osinstances: Vec<OSInstance> = all_osinstances
+            .items
+            .into_iter()
+            .filter(|osi| osi.spec.nodestatus == NODE_STATUS_CONFIG)
+            .collect();
+    
+        debug!("config_osi count = {:?}", osinstances.len());
+    
         Ok(osinstances)
     }
 
     // 为指定数量的节点进行配置操作
-    async fn assign_config(&self, os: &OS, sysconfigs: Configs, config_version: String, limit: i64, namespace: &str) -> Result<bool, Error> {
+    async fn assign_config(&self, _os: &OS, sysconfigs: Configs, config_version: String, limit: i64, namespace: &str) -> Result<bool, Error> {
 
-        let mut osinstances = self.get_idle_osInstances(namespace, limit + 1).await?;
+        debug!("start assign_config");
+
+        let mut osinstances = self.get_idle_os_instances(namespace, limit + 1).await?;
 
         let mut count = 0;
         // 遍历 osi 列表
         for osi in osinstances.iter_mut() {
-            if count >= limit {
+            if count > limit {
                 break;
             }
 
-            // 获取节点的操作系统版本
-            let config_version_node = osi.spec.sysconfigs.clone().unwrap().version.unwrap();
+            let mut config_sign = true;
+            if let Some(sysconfigs) = osi.spec.sysconfigs.clone() {
+                if let Some(version) = sysconfigs.version {
+                    debug!("node name: {:?}, config_version_node: {:?}, config_version: {:?}", osi.name(), version, config_version);
+                    if version == config_version {
+                        config_sign = false;
+                    }
+                }
+            }
         
-		    // 如果版本不同，则将新的配置信息更新到实例中，并将节点状态标记为“配置完成”。
-            if config_version_node != config_version {
+		    // 如果版本不同或 osi 未初始化，则将新的配置信息更新到实例中，并将节点状态标记为“配置完成”。
+            if config_sign {
                 count += 1;
                 osi.spec.sysconfigs = Some(sysconfigs.clone());
                 osi.spec.nodestatus = NODE_STATUS_CONFIG.to_string();
@@ -336,23 +364,21 @@ impl<T: ApplyApi> OperatorController<T> {
         Ok(count >= limit)
     }
 
-    // 获取所在节点状态为配置的 osinstance列表
-    async fn get_idle_osInstances(&self, namespace: &str, limit: i64) -> Result<ObjectList<OSInstance>, Error> {
+    // 获取所在节点状态为空闲的 osinstance列表
+    async fn get_idle_os_instances(&self, namespace: &str, limit: i64) -> Result<Vec<OSInstance>, Error> {
         
         let osi_api: Api<OSInstance> = Api::namespaced(self.k8s_client.clone(), namespace);
 
-        let lp = ListParams::default()
-        .fields(&format!("{}={}", OSI_STATUS_NAME, NODE_STATUS_IDLE))
-        .limit(limit as u32);
+        // 获取所有 OSInstance 资源
+        let all_osinstances: ObjectList<OSInstance> = osi_api.list(&ListParams::default().limit(limit as u32)).await?;
 
-        let osinstances =  match osi_api.list(&lp).await {
-            Ok(os_instance_list) => os_instance_list,
-            Err(err) => {
-                log::error!("unable to list nodes with requirements: {}", err);
-                return Err(Error::KubeClient { source: err });
-            }
-        };
-
+        // 在客户端进行过滤，节点状态为 NODE_STATUS_IDLE
+        let osinstances: Vec<OSInstance> = all_osinstances
+            .items
+            .into_iter()
+            .filter(|osi| osi.spec.nodestatus == NODE_STATUS_IDLE)
+            .collect();
+    
         Ok(osinstances)
     }
 
@@ -375,6 +401,8 @@ pub async fn reconcile<T: ApplyApi>(
         .namespace()
         .ok_or(Error::MissingObjectKey { resource: "os".to_string(), value: "namespace".to_string() })?;
 
+    debug!("namespace : {:?}", namespace);
+
     // 获取 worker 节点数
     let node_num = match operator_controller.get_and_update_os(&namespace).await {
         Ok(node_num) => node_num,
@@ -383,6 +411,8 @@ pub async fn reconcile<T: ApplyApi>(
         },
         Err(_) => return Ok(REQUEUE_ERROR),
     };
+
+    debug!("node_num : {:?}", node_num);
 
     let opstype = os_cr.spec.opstype.clone();
     let ops = opstype.as_str();
@@ -411,6 +441,8 @@ pub async fn reconcile<T: ApplyApi>(
 
             // 检查待配置的节点数量
             let limit = operator_controller.check_config(&namespace, os_cr.spec.maxunavailable.min(node_num)).await?;
+
+            debug!("limit: {}", limit);
 
             // 指派配置任务给节点
             let sys_configs = os_cr.spec.sysconfigs.clone().unwrap();
@@ -464,17 +496,17 @@ pub mod reconciler_error {
         #[error("{}.metadata.{} is not exist", resource, value)]
         MissingObjectKey { resource: String, value: String },
 
-        #[error("Cannot get {}, {} is None", value, value)]
-        MissingSubResource { value: String },
+        // #[error("Cannot get {}, {} is None", value, value)]
+        // MissingSubResource { value: String },
 
         #[error("operation {} cannot be recognized", value)]
         Operation { value: String },
 
-        #[error("Expect OS Version is not same with Node OS Version, please upgrade first")]
-        UpgradeBeforeConfig,
+        // #[error("Expect OS Version is not same with Node OS Version, please upgrade first")]
+        // UpgradeBeforeConfig,
 
-        #[error("Error when drain node, error reported: {}", value)]
-        DrainNode { value: String },
+        // #[error("Error when drain node, error reported: {}", value)]
+        // DrainNode { value: String },
     }
 }
 
@@ -492,7 +524,7 @@ mod test {
     
     #[tokio::test]
     async fn test_rollback() {
-        env::set_var("RUST_LOG", "debug");
+        env::set_var("RUST_LOG", "info");
         env_logger::init();
 
         let (test_operator_controller, fakeserver) = OperatorController::<ControllerClient>::test();
@@ -638,7 +670,7 @@ mod test {
         fakeserver.test_function(Testcases::GetIdleOSInstances(expected_error.clone()));
 
         // 执行测试
-        let result = test_operator_controller.get_idle_osInstances("default", 3).await;
+        let result = test_operator_controller.get_idle_os_instances("default", 3).await;
 
         // 验证返回值
         assert!(result.is_err());

@@ -16,11 +16,9 @@
  mod apiserver_mock;
  mod controller;
  mod crd;
- mod utils;
  mod values;
 
 pub use apiclient::ControllerClient;
 pub use controller::{error_policy, reconcile, OperatorController};
 pub use crd::OS;
-pub use values::SOCK_PATH;
  
